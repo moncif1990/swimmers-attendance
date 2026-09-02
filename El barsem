@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>حضور السباحين</title>
+
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: #f2f7fb;
+    margin: 0;
+    padding: 15px;
+    text-align: center;
+}
+
+h1 {
+    color: #0066aa;
+}
+
+.box {
+    background: white;
+    padding: 15px;
+    margin: 12px auto;
+    border-radius: 15px;
+    max-width: 500px;
+    box-shadow: 0 3px 10px #bbb;
+}
+
+input, button {
+    width: 90%;
+    padding: 12px;
+    margin: 7px;
+    border-radius: 8px;
+    border: 1px solid #aaa;
+    font-size: 16px;
+}
+
+button {
+    background: #0077cc;
+    color: white;
+    border: none;
+}
+
+button:active {
+    transform: scale(.97);
+}
+
+video {
+    width: 100%;
+    border-radius: 12px;
+    margin-top: 10px;
+}
+
+#status {
+    font-weight: bold;
+    margin: 10px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th, td {
+    padding: 8px;
+    border-bottom: 1px solid #ddd;
+}
+</style>
+</head>
+
+<body>
+
+<h1>🏊‍♂️ حضور السباحين</h1>
+
+<div class="box">
+    <h2>تسجيل سباح جديد</h2>
+
+    <input id="name" type="text" placeholder="اسم السباح">
+
+    <button onclick="startRegister()">
+        📷 تسجيل الوجه
+    </button>
+
+    <div id="registerCamera"></div>
+
+    <button onclick="saveSwimmer()">
+        💾 حفظ السباح
+    </button>
+</div>
+
+<div class="box">
+    <h2>تسجيل الحضور</h2>
+
+    <button onclick="startAttendance()">
+        📷 فتح الكاميرا
+    </button>
+
+    <div id="camera"></div>
+
+    <div id="status">اضغط فتح الكاميرا</div>
+</div>
+
+<div class="box">
+    <h2>📋 قائمة الحضور</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>السباح</th>
+                <th>التاريخ</th>
+                <th>الساعة</th>
+            </tr>
+        </thead>
+
+        <tbody id="attendance"></tbody>
+    </table>
+
+    <button onclick="clearAttendance()">
+        🗑️ مسح الحضور
+    </button>
+</div>
+
+<script>
+
+let registeredFace = null;
+let stream = null;
+
+async function loadModels() {
+
+    document.getElementById("status").innerText =
+        "⏳ جاري تحميل نظام التعرف على الوجه...";
+
+    await faceapi.nets.tinyFaceDetector.loadFromUri(
+        "https://justadudewhohacks.github.io/face-api.js/models"
+    );
+
+    await faceapi.nets.faceLandmark68Net.loadFromUri(
+        "https://justadudewhohacks.github.io/face-api.js/models"
+    );
+
+    await faceapi.nets.faceRecognitionNet.loadFromUri(
+        "https://justadudewhohacks.github.io/face-api.js/models"
+    );
+
+    document.getElementById("status").innerText =
+        "✅ النظام جاهز";
+}
+
+async function startRegister() {
+
+    const name = document.getElementById("name").value.trim();
+
+    if (!name) {
+        alert("اكتب اسم السباح أولاً");
+        return;
+    }
+
+    if (!faceapi.nets.tinyFaceDetector.params) {
+        await loadModels();
+    }
+
+    const video = document.createElement("video");
+
+    video.autoplay = true;
+    video.muted = true;
+    video.playsInline = true;
+
+    document.getElementById("registerCamera").innerHTML = "";
+    document.getElementById("registerCamera").appendChild(video);
+
+    stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+            facingMode: "user"
+        }
+    });
+
+    video.srcObject = stream;
+
+    setTimeout(async () => {
+
+        const detection =
+            await faceapi
+            .detectSingleFace(
+                video,
+                new faceapi.TinyFaceDetectorOptions()
+            )
+            .withFaceLandmarks()
+            .withFaceDescriptor();
+
+        if (!detection) {
+
+            alert("لم يتم العثور على الوجه. قرب وجهك من الكاميرا.");
+
+            return;
+        }
+
+        registeredFace = {
+            name: name,
+            descriptor: Array.from(detection.descriptor)
+        };
+
+        localStorage.setItem(
+            "swimmer_" + name,
+            JSON.stringify(registeredFace)
+        );
+
+        alert("✅ تم تسجيل وجه " + name);
+
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+        }
+
+    }, 3000);
+}
+
+async function saveSwimmer() {
+
+    if (!registeredFace) {
+
+        alert("سجل وجه السباح أولاً");
+
+        return;
+    }
+
+    alert(
+        "تم حفظ السباح: " +
+        registeredFace.name
+    );
+
+    registeredFace = null;
+}
+
+async function startAttendance() {
+
+    if (!faceapi.nets.tinyFaceDetector.params) {
+        await loadModels();
+    }
+
+    const video = document.createElement("video");
+
+    video.autoplay = true;
+    video.muted = true;
+    video.playsInline = true;
+
+    document.getElementById("camera").innerHTML = "";
+    document.getElementById("camera").appendChild(video);
+
+    stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+            facingMode: "user"
+        }
+    });
+
+    video.srcObject = stream;
+
+    document.getElementById("status").innerText =
+        "👀 ابحث عن السباح...";
+
+    setInterval(async () => {
+
+        const detection =
+            await faceapi
+            .detectSingleFace(
+                video,
+                new faceapi.TinyFaceDetectorOptions()
+            )
+            .withFaceLandmarks()
+            .withFaceDescriptor();
+
+        if (!detection) return;
+
+        const descriptor = detection.descriptor;
+
+        const swimmers = Object.keys(localStorage);
+
+        for (let key of swimmers) {
+
+            if (!key.startsWith("swimmer_"))
+                continue;
+
+            const swimmer =
+                JSON.parse(localStorage.getItem(key));
+
+            const savedDescriptor =
+                new Float32Array(swimmer.descriptor);
+
+            const distance =
+                faceapi.euclideanDistance(
+                    descriptor,
+                    savedDescriptor
+                );
+
+            if (distance < 0.5) {
+
+                registerAttendance(swimmer.name);
+
+                document.getElementById("status").innerText =
+                    "✅ حضور مسجل: " + swimmer.name;
+
+                return;
+            }
+        }
+
+        document.getElementById("status").innerText =
+            "❌ السباح غير مسجل";
+
+    }, 2000);
+}
+
+function registerAttendance(name) {
+
+    let data =
+        JSON.parse(
+            localStorage.getItem("attendance") || "[]"
+        );
+
+    const now = new Date();
+
+    const date =
+        now.toLocaleDateString("ar-DZ");
+
+    const time =
+        now.toLocaleTimeString("ar-DZ", {
+            hour: "2-digit",
+            minute: "2-digit"
+        });
+
+    const exists =
+        data.some(x =>
+            x.name === name &&
+            x.date === date
+        );
+
+    if (!exists) {
+
+        data.push({
+            name: name,
+            date: date,
+            time: time
+        });
+
+        localStorage.setItem(
+            "attendance",
+            JSON.stringify(data)
+        );
+
+        showAttendance();
+    }
+}
+
+function showAttendance() {
+
+    const data =
+        JSON.parse(
+            localStorage.getItem("attendance") || "[]"
+        );
+
+    const tbody =
+        document.getElementById("attendance");
+
+    tbody.innerHTML = "";
+
+    data.reverse().forEach(x => {
+
+        const row = document.createElement("tr");
+
+        row.innerHTML = `
+            <td>${x.name}</td>
+            <td>${x.date}</td>
+            <td>${x.time}</td>
+        `;
+
+        tbody.appendChild(row);
+    });
+}
+
+function clearAttendance() {
+
+    if (
+        confirm("هل تريد مسح جميع سجلات الحضور؟")
+    ) {
+
+        localStorage.removeItem("attendance");
+
+        showAttendance();
+    }
+}
+
+showAttendance();
+
+</script>
+
+</body>
+</html>
